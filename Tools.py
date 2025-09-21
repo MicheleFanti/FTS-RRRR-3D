@@ -15,7 +15,7 @@ def initialize_alternative_rho(sequence, rho_class, rho0_per_class,
                                sc_frac=None): 
 
     Nx, Ny, Nz, Nang = gridshape
-    X, Y, Z = np.meshgrid(np.arange(Nx), np.arange(Ny), indexing="ij")
+    X, Y, Z = np.meshgrid(np.arange(Nx), np.arange(Ny), np.arange(Nz), indexing="ijk")
     sigma = droplet_sigma_frac * min(Nx, Ny, Nz)
     center = (Nx // 2, Ny // 2, Nz//2)
 
