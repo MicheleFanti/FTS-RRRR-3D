@@ -8,35 +8,29 @@ import s2fft
 def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
     N_ang = q.shape[-1]
     L = int(np.sqrt(N_ang)-1)
-    flm = s2fft.forward(q, L, method="jax_cuda")
+    phase_half = np.exp(-1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
     ell = np.arange(L+1)
     ang_mul_half_full = np.repeat(ang_mul_half, 2*ell+1)
+
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    flm = s2fft.forward(q* np.exp(-w*ds/2), L, method="jax_cuda")
     flm = flm * ang_mul_half_full[None,None,None,:]
     q = s2fft.inverse(flm, L, method="jax_cuda")
-    phase_half = np.exp(-1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    q = q * np.exp(-w*ds)
-    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    flm = s2fft.forward(q, L, method="jax_cuda")
-    flm = flm * ang_mul_half_full[None,None,None,:]
-    q = s2fft.inverse(flm, L, method="jax_cuda")
     return q
 
 def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
     N_ang = q.shape[-1]
     L = int(np.sqrt(N_ang)-1)
-    flm = s2fft.forward(q, L, method="jax_cuda")
+    phase_half = np.exp(+1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
     ell = np.arange(L+1)
     ang_mul_half_full = np.repeat(ang_mul_half, 2*ell+1)
+
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    flm = s2fft.forward(q* np.exp(-w*ds/2), L, method="jax_cuda")
     flm = flm * ang_mul_half_full[None,None,None,:]
     q = s2fft.inverse(flm, L, method="jax_cuda")
-    phase_half = np.exp(1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    q = q * np.exp(-w*ds)
-    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    flm = s2fft.forward(q, L, method="jax_cuda")
-    flm = flm * ang_mul_half_full[None,None,None,:]
-    q = s2fft.inverse(flm, L, method="jax_cuda")
     return q
 
 def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_forward, dt, q_prev, mode):
@@ -52,7 +46,7 @@ def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, 
     UZ = np.asarray(U_vectors[:,2])
     L = int(np.sqrt(N_ang) - 1)
     ell = np.arange(L+1)
-    ang_mul_half = np.exp(-Dtheta*ell*(ell+1)/(2)*ds)
+    ang_mul_half = np.exp(-Dtheta*ell*(ell+1)*ds)
     if q0_spatial.ndim == 3 and q0_spatial.shape[-1] == 1:
         q_curr = np.repeat(q0_spatial, N_ang, axis=-1).astype(np.complex64)
     else:
@@ -80,7 +74,7 @@ def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta,
     UZ = np.asarray(U_vectors[:,2])
     L = int(np.sqrt(N_ang) - 1)
     ell = np.arange(L+1)
-    ang_mul_half = np.exp(-Dtheta*ell*(ell+1)/(2)*ds)
+    ang_mul_half = np.exp(-Dtheta*ell*(ell+1)*ds)
     if q0_spatial.ndim == 3 and q0_spatial.shape[-1] == 1:
         q_curr = np.repeat(q0_spatial, N_ang, axis=-1).astype(np.complex64)
     else:
