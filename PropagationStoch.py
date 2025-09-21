@@ -21,8 +21,7 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
     N_ang = q_jax.shape[-1]
     L = int(jnp.sqrt(N_ang)-1)
     ell = jnp.arange(L+1)
-    ang_mul_half_full = jnp.repeat(ang_mul_half_jax, 2*ell+1)
-
+    ang_mul_half_full = jnp.concatenate([jnp.repeat(ang_mul_half_jax[l], 2*l+1) for l in range(len(ang_mul_half_jax))])
     phase_half = jnp.exp(-1j * (
         KX_jax[..., None]*UX_jax[None, None, None, :] +
         KY_jax[..., None]*UY_jax[None, None, None, :] +
@@ -59,7 +58,8 @@ def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
     N_ang = q_jax.shape[-1]
     L = int(jnp.sqrt(N_ang)-1)
     ell = jnp.arange(L+1)
-    ang_mul_half_full = jnp.repeat(ang_mul_half_jax, 2*ell+1)
+    ang_mul_half_full = jnp.concatenate([jnp.repeat(ang_mul_half_jax[l], 2*l+1) for l in range(len(ang_mul_half_jax))])
+
 
     phase_half = jnp.exp(1j * (
         KX_jax[..., None]*UX_jax[None, None, None, :] +
