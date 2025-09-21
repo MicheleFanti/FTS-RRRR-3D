@@ -75,7 +75,7 @@ def initialize_alternative_rho(sequence, rho_class, rho0_per_class,
 from grid.angular import AngularGrid
 
 def lebedev_grid(Nang):
-    grid = AngularGrid(degree=5)
+    grid = AngularGrid(degree=11)
     u = np.asarray(grid.points)
     w = np.asarray(grid.weights)
     return u, w
