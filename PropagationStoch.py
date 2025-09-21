@@ -2,36 +2,51 @@ import cupy as np
 from cupy.fft import fftn, ifftn, fftfreq
 from collections import Counter
 import LateralChains
+import jax
+import jax.numpy as jnp
+from jax.numpy.fft import fftn, ifftn
 import s2fft
 
-
 def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
+    q = jax.device_put(jnp.array(q))
+    w = jax.device_put(jnp.array(w))
     N_ang = q.shape[-1]
-    L = int(np.sqrt(N_ang)-1)
-    phase_half = np.exp(-1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
-    ell = np.arange(L+1)
-    ang_mul_half_full = np.repeat(ang_mul_half, 2*ell+1)
-
+    L = int(jnp.sqrt(N_ang)-1)
+    ell = jnp.arange(L+1)
+    ang_mul_half_full = jnp.repeat(ang_mul_half, 2*ell+1)
+    phase_half = jnp.exp(-1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    flm = s2fft.forward(q* np.exp(-w*ds/2), L, method="jax_cuda")
-    flm = flm * ang_mul_half_full[None,None,None,:]
-    q = s2fft.inverse(flm, L, method="jax_cuda")
+    q_flat = q.reshape(-1, N_ang)
+    w_flat = w.reshape(-1)
+    def sht_single(q_point, w_point):
+        flm = s2fft.forward(q_point * jnp.exp(-w_point*ds/2), L, method="jax_cuda")
+        flm = flm * ang_mul_half_full
+        return s2fft.inverse(flm, L, method="jax_cuda")
+    q_flat = jax.vmap(sht_single)(q_flat, w_flat)
+    q = q_flat.reshape(q.shape)*jnp.exp(-w*ds/2)
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    return q
+    return np.asarray(q)
 
 def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
+    q = jax.device_put(jnp.array(q))
+    w = jax.device_put(jnp.array(w))
     N_ang = q.shape[-1]
-    L = int(np.sqrt(N_ang)-1)
-    phase_half = np.exp(+1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
-    ell = np.arange(L+1)
-    ang_mul_half_full = np.repeat(ang_mul_half, 2*ell+1)
+    L = int(jnp.sqrt(N_ang)-1)
+    ell = jnp.arange(L+1)
+    ang_mul_half_full = jnp.repeat(ang_mul_half, 2*ell+1)
+    phase_half = jnp.exp(1j*(KX[...,None]*UX[None,None,None,:] + KY[...,None]*UY[None,None,None,:] + KZ[...,None]*UZ[None,None,None,:])*(ds/2))
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    q_flat = q.reshape(-1, N_ang)
+    w_flat = w.reshape(-1)
+    def sht_single(q_point, w_point):
+        flm = s2fft.forward(q_point * jnp.exp(-w_point*ds/2), L, method="jax_cuda")
+        flm = flm * ang_mul_half_full
+        return s2fft.inverse(flm, L, method="jax_cuda")
+    q_flat = jax.vmap(sht_single)(q_flat, w_flat)
+    q = q_flat.reshape(q.shape)*jnp.exp(-w*ds/2)
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    return np.asarray(q)
 
-    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    flm = s2fft.forward(q* np.exp(-w*ds/2), L, method="jax_cuda")
-    flm = flm * ang_mul_half_full[None,None,None,:]
-    q = s2fft.inverse(flm, L, method="jax_cuda")
-    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    return q
 
 def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_forward, dt, q_prev, mode):
     Nx, Ny, Nz = q0_spatial.shape[:3]
