@@ -120,7 +120,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
         eta_2 = eta_sc2_full[idx]
         mu_forward = (eta_1 + 1j*eta_2)/np.sqrt(2)
         mu_forward = np.broadcast_to(mu_forward[:, :, :, None, :], (Nx, Ny, Nz, Nang, n_quad_per_rod))
-        q_sc_forward[idx] = propagate_forward_wlc(np.ones(gridshape[:2]), w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_sc[idx], mode)
+        q_sc_forward[idx] = propagate_forward_wlc(np.ones(gridshape[:3]), w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_sc[idx], mode)
 
     #Propagate residue-specific sidechains:
     q_sc_rs_forward = {key: np.zeros((LateralChains.SideChain(key).length, n_quad_per_rod, *gridshape), dtype=np.complex64) for key in sc_keys}
@@ -231,7 +231,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
         eta_1 = eta_sc1_full[idx][:, : , :, ::-1]
         eta_2 = eta_sc2_full[idx][:, : , :, ::-1]
         mu_backward = (eta_2 + 1j*eta_1)/np.sqrt(2)
-        mu_backward = np.broadcast_to(mu_backward[:, :, None, :], (Nx, Ny, Nang, n_quad_per_rod))
+        mu_backward = np.broadcast_to(mu_backward[:, :,:, None, :], (Nx, Ny, Nz, Nang, n_quad_per_rod))
         q_sc_bb_full[idx] = propagate_backward_wlc(q_sc_bb[idx], w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_sc[idx], mode)
     
     temp_f = np.sum(qf_list[-1][-1] * ang_weights[None,None,None,:], axis=-1)
