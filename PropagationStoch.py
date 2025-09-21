@@ -39,7 +39,7 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
         return s2fft.inverse(flm, L, method="jax_cuda")
 
     q_flat = jax.vmap(sht_single)(q_flat, w_flat)
-    q_jax = q_flat.reshape(q_jax.shape) * jnp.exp(-w_jax*ds/2)
+    q_jax = q_flat.reshape(w.shape) * jnp.exp(-w_jax*ds/2)
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     return np.asarray(q_jax)
 
@@ -60,7 +60,6 @@ def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
     ell = jnp.arange(L+1)
     ang_mul_half_full = jnp.concatenate([jnp.repeat(ang_mul_half_jax[l], 2*l+1) for l in range(len(ang_mul_half_jax))])
 
-
     phase_half = jnp.exp(1j * (
         KX_jax[..., None]*UX_jax[None, None, None, :] +
         KY_jax[..., None]*UY_jax[None, None, None, :] +
@@ -78,7 +77,7 @@ def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
         return s2fft.inverse(flm, L, method="jax_cuda")
 
     q_flat = jax.vmap(sht_single)(q_flat, w_flat)
-    q_jax = q_flat.reshape(q_jax.shape) * jnp.exp(-w_jax*ds/2)
+    q_jax = q_flat.reshape(w.shape) * jnp.exp(-w_jax*ds/2)
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     return np.asarray(q_jax)
 
