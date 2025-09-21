@@ -75,13 +75,6 @@ def initialize_alternative_rho(sequence, rho_class, rho0_per_class,
 from grid.angular import AngularGrid
 
 def lebedev_grid(Nang):
-    '''degree_to_N = {3:6,5:14,7:26,9:38,11:50,13:74,15:86,17:110,19:146,21:170,23:194,25:230,27:266,29:302,31:350}
-    degrees = np.array(list(degree_to_N.keys()))
-    Npoints = np.array(list(degree_to_N.values()))
-    idx = np.searchsorted(Npoints, Nang)
-    if idx >= len(degrees):
-        raise ValueError(f"Nang={Nang} too large, max supported {int(Npoints[-1])}")
-    degree = int(degrees[idx])'''
     grid = AngularGrid(degree=11)
     u = np.asarray(grid.points)
     w = np.asarray(grid.weights)
