@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.colors as mcolors
 import LateralChains
-
-from s2fft.grid import AngularGrid
 _plot_counter = 0 
 def initialize_alternative_rho(sequence, rho_class, rho0_per_class,
                                gridshape, spat_weights, ang_weights,
