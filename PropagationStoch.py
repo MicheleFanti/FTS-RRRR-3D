@@ -8,24 +8,26 @@ from jax.numpy.fft import fftn, ifftn
 import s2fft
 
 def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
-    q_jax = jax.device_put(jnp.array(q))
-    w_jax = jax.device_put(jnp.array(w))
-    UX_jax = jax.device_put(jnp.array(UX))
-    UY_jax = jax.device_put(jnp.array(UY))
-    UZ_jax = jax.device_put(jnp.array(UZ))
-    KX_jax = jax.device_put(jnp.array(KX))
-    KY_jax = jax.device_put(jnp.array(KY))
-    KZ_jax = jax.device_put(jnp.array(KZ))
-    ang_mul_half_jax = jnp.array(ang_mul_half)
+    q_jax = jax.device_put(jnp.array(np.ascontiguousarray(q)))
+    w_jax = jax.device_put(jnp.array(np.ascontiguousarray(w)))
+    UX_jax = jax.device_put(jnp.array(np.ascontiguousarray(UX)))
+    UY_jax = jax.device_put(jnp.array(np.ascontiguousarray(UY)))
+    UZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(UZ)))
+    KX_jax = jax.device_put(jnp.array(np.ascontiguousarray(KX)))
+    KY_jax = jax.device_put(jnp.array(np.ascontiguousarray(KY)))
+    KZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(KZ)))
+    ang_mul_half_jax = jnp.array(np.ascontiguousarray(ang_mul_half))
 
     N_ang = q_jax.shape[-1]
     L = int(jnp.sqrt(N_ang)-1)
     ell = jnp.arange(L+1)
     ang_mul_half_full = jnp.repeat(ang_mul_half_jax, 2*ell+1)
 
-    phase_half = jnp.exp(-1j*(KX_jax[...,None]*UX_jax[None,None,None,:] +
-                              KY_jax[...,None]*UY_jax[None,None,None,:] +
-                              KZ_jax[...,None]*UZ_jax[None,None,None,:])*(ds/2))
+    phase_half = jnp.exp(-1j * (
+        KX_jax[..., None]*UX_jax[None, None, None, :] +
+        KY_jax[..., None]*UY_jax[None, None, None, :] +
+        KZ_jax[..., None]*UZ_jax[None, None, None, :]
+    ) * (ds/2))
 
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
 
@@ -39,30 +41,31 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
 
     q_flat = jax.vmap(sht_single)(q_flat, w_flat)
     q_jax = q_flat.reshape(q_jax.shape) * jnp.exp(-w_jax*ds/2)
-
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     return np.asarray(q_jax)
 
 
 def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
-    q_jax = jax.device_put(jnp.array(q))
-    w_jax = jax.device_put(jnp.array(w))
-    UX_jax = jax.device_put(jnp.array(UX))
-    UY_jax = jax.device_put(jnp.array(UY))
-    UZ_jax = jax.device_put(jnp.array(UZ))
-    KX_jax = jax.device_put(jnp.array(KX))
-    KY_jax = jax.device_put(jnp.array(KY))
-    KZ_jax = jax.device_put(jnp.array(KZ))
-    ang_mul_half_jax = jnp.array(ang_mul_half)
+    q_jax = jax.device_put(jnp.array(np.ascontiguousarray(q)))
+    w_jax = jax.device_put(jnp.array(np.ascontiguousarray(w)))
+    UX_jax = jax.device_put(jnp.array(np.ascontiguousarray(UX)))
+    UY_jax = jax.device_put(jnp.array(np.ascontiguousarray(UY)))
+    UZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(UZ)))
+    KX_jax = jax.device_put(jnp.array(np.ascontiguousarray(KX)))
+    KY_jax = jax.device_put(jnp.array(np.ascontiguousarray(KY)))
+    KZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(KZ)))
+    ang_mul_half_jax = jnp.array(np.ascontiguousarray(ang_mul_half))
 
     N_ang = q_jax.shape[-1]
     L = int(jnp.sqrt(N_ang)-1)
     ell = jnp.arange(L+1)
     ang_mul_half_full = jnp.repeat(ang_mul_half_jax, 2*ell+1)
 
-    phase_half = jnp.exp(1j*(KX_jax[...,None]*UX_jax[None,None,None,:] +
-                             KY_jax[...,None]*UY_jax[None,None,None,:] +
-                             KZ_jax[...,None]*UZ_jax[None,None,None,:])*(ds/2))
+    phase_half = jnp.exp(1j * (
+        KX_jax[..., None]*UX_jax[None, None, None, :] +
+        KY_jax[..., None]*UY_jax[None, None, None, :] +
+        KZ_jax[..., None]*UZ_jax[None, None, None, :]
+    ) * (ds/2))
 
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
 
@@ -76,9 +79,9 @@ def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
 
     q_flat = jax.vmap(sht_single)(q_flat, w_flat)
     q_jax = q_flat.reshape(q_jax.shape) * jnp.exp(-w_jax*ds/2)
-
     q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     return np.asarray(q_jax)
+
 
 
 
