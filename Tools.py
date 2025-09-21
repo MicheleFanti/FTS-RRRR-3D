@@ -229,7 +229,7 @@ def plot_densities(
     import numpy as _np
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
-    Nx, Ny, Nz = gridshape
+    Nx, Ny, Nz, Nang = gridshape
     plot_classes = list(rho_class.keys())
 
     if outdir is None:
@@ -303,8 +303,9 @@ def plot_densities(
             if rho_plot.ndim == 4 and rho_plot.shape[-1] == 1:
                 rho_plot = rho_plot[..., 0]
         else:
+            # Corrected: integrate over last dimension with full broadcasting
             rho_plot = np.asnumpy(
-                _np.sum(rho_class[c_key] * ang_weights[None, None, :], axis=-1)
+                np.sum(rho_class[c_key] * ang_weights[None, None, None, :], axis=-1)
             )
         process_density(c_key, rho_plot)
 
