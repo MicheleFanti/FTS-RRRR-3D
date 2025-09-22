@@ -2,89 +2,74 @@ import cupy as np
 from cupy.fft import fftn, ifftn, fftfreq
 from collections import Counter
 import LateralChains
-import jax
-import jax.numpy as jnp
-from jax.numpy.fft import fftn, ifftn
-import s2fft
+from scipy.special import sph_harm
 
-def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
-    q_jax = jax.device_put(jnp.array(np.ascontiguousarray(q)))
-    w_jax = jax.device_put(jnp.array(np.ascontiguousarray(w)))
-    UX_jax = jax.device_put(jnp.array(np.ascontiguousarray(UX)))
-    UY_jax = jax.device_put(jnp.array(np.ascontiguousarray(UY)))
-    UZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(UZ)))
-    KX_jax = jax.device_put(jnp.array(np.ascontiguousarray(KX)))
-    KY_jax = jax.device_put(jnp.array(np.ascontiguousarray(KY)))
-    KZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(KZ)))
-    ang_mul_half_jax = jnp.array(np.ascontiguousarray(ang_mul_half))
+class LebedevSHT:
+    def __init__(self, points, weights, Lmax):
+        x, y, z = points.T
+        theta = np.arccos(z)
+        phi = np.arctan2(y, x)
+        self.w = np.asarray(weights)
+        self.Lmax = Lmax
+        Ylist = []
+        for l in range(Lmax+1):
+            for m in range(-l, l+1):
+                Ylm = sph_harm(m, l, phi, theta)
+                Ylist.append(Ylm)
+        Y = np.stack(Ylist, axis=0)
+        self.Y = np.asarray(Y)
+        self.Y_conj = np.conj(self.Y)
 
-    N_ang = q_jax.shape[-1]
-    L = int(jnp.sqrt(N_ang)-1)
-    ell = jnp.arange(L+1)
-    ang_mul_half_full = jnp.concatenate([jnp.repeat(ang_mul_half_jax[l], 2*l+1) for l in range(len(ang_mul_half_jax))])
-    phase_half = jnp.exp(-1j * (
-        KX_jax[..., None]*UX_jax[None, None, None, :] +
-        KY_jax[..., None]*UY_jax[None, None, None, :] +
-        KZ_jax[..., None]*UZ_jax[None, None, None, :]
+    @property
+    def nlm(self):
+        return (self.Lmax+1)**2
+
+    def forward(self, f):
+        fw = f * self.w
+        coeffs = np.tensordot(self.Y_conj, fw, axes=(1,3))
+        return np.moveaxis(coeffs, 0, -1)
+
+    def inverse(self, coeffs):
+        coeffs = np.moveaxis(coeffs, -1, 0)
+        f = np.tensordot(coeffs, self.Y, axes=(0,0))
+        return f
+def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
+    N_ang = q.shape[-1]
+    ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
+
+    phase_half = np.exp(-1j * (
+        KX[..., None]*UX[None, None, None, :] +
+        KY[..., None]*UY[None, None, None, :] +
+        KZ[..., None]*UZ[None, None, None, :]
+    ) * (ds/2))
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    flm = sht.forward(q* np.exp(-w*ds/2))
+    flm = flm * ang_mul_half_full[None, :]
+    q = sht.inverse(flm)
+    q = q* np.exp(-w*ds/2)
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    return q
+
+
+def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
+    N_ang = q.shape[-1]
+    ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
+
+    phase_half = np.exp(1j * (
+        KX[..., None]*UX[None, None, None, :] +
+        KY[..., None]*UY[None, None, None, :] +
+        KZ[..., None]*UZ[None, None, None, :]
     ) * (ds/2))
 
-    q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    flm = sht.forward(q* np.exp(-w*ds/2))
+    flm = flm * ang_mul_half_full[None, :]
+    q = sht.inverse(flm)
+    q = q* np.exp(-w*ds/2)
+    q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    return q
 
-    q_flat = q_jax.reshape(-1, N_ang)
-    w_flat = w_jax.reshape(-1, N_ang)
-
-    def sht_single(q_point, w_point):
-        flm = s2fft.forward(q_point * jnp.exp(-w_point*ds/2), L, method="jax_cuda")
-        flm = flm * ang_mul_half_full
-        return s2fft.inverse(flm, L, method="jax_cuda")
-
-    q_flat = jax.vmap(sht_single)(q_flat, w_flat)
-    q_jax = q_flat.reshape(w.shape) * jnp.exp(-w_jax*ds/2)
-    q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    return np.asarray(q_jax)
-
-
-def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half):
-    q_jax = jax.device_put(jnp.array(np.ascontiguousarray(q)))
-    w_jax = jax.device_put(jnp.array(np.ascontiguousarray(w)))
-    UX_jax = jax.device_put(jnp.array(np.ascontiguousarray(UX)))
-    UY_jax = jax.device_put(jnp.array(np.ascontiguousarray(UY)))
-    UZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(UZ)))
-    KX_jax = jax.device_put(jnp.array(np.ascontiguousarray(KX)))
-    KY_jax = jax.device_put(jnp.array(np.ascontiguousarray(KY)))
-    KZ_jax = jax.device_put(jnp.array(np.ascontiguousarray(KZ)))
-    ang_mul_half_jax = jnp.array(np.ascontiguousarray(ang_mul_half))
-
-    N_ang = q_jax.shape[-1]
-    L = int(jnp.sqrt(N_ang)-1)
-    ell = jnp.arange(L+1)
-    ang_mul_half_full = jnp.concatenate([jnp.repeat(ang_mul_half_jax[l], 2*l+1) for l in range(len(ang_mul_half_jax))])
-
-    phase_half = jnp.exp(1j * (
-        KX_jax[..., None]*UX_jax[None, None, None, :] +
-        KY_jax[..., None]*UY_jax[None, None, None, :] +
-        KZ_jax[..., None]*UZ_jax[None, None, None, :]
-    ) * (ds/2))
-
-    q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-
-    q_flat = q_jax.reshape(-1, N_ang)
-    w_flat = w_jax.reshape(-1, N_ang)
-
-    def sht_single(q_point, w_point):
-        flm = s2fft.forward(q_point * jnp.exp(-w_point*ds/2), L, method="jax_cuda")
-        flm = flm * ang_mul_half_full
-        return s2fft.inverse(flm, L, method="jax_cuda")
-
-    q_flat = jax.vmap(sht_single)(q_flat, w_flat)
-    q_jax = q_flat.reshape(w.shape) * jnp.exp(-w_jax*ds/2)
-    q_jax = ifftn(fftn(q_jax, axes=(0,1,2)) * phase_half, axes=(0,1,2))
-    return np.asarray(q_jax)
-
-
-
-
-def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_forward, dt, q_prev, mode):
+def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_forward, dt, q_prev, mode, sht):
     Nx, Ny, Nz = q0_spatial.shape[:3]
     N_ang = U_vectors.shape[0]
     ds = length / n_substeps
@@ -106,13 +91,13 @@ def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, 
     w_arr = w if w.ndim==3 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
     for i in range(n_substeps):
         if mode == 'thermal':
-            q_curr = strang_step_wlc(q_curr - dt*(q_curr - q_prev[i]) + dt*mu_forward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half)
+            q_curr = strang_step_wlc(q_curr - dt*(q_curr - q_prev[i]) + dt*mu_forward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht)
         else:
-            q_curr = strang_step_wlc(q_curr, w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half)
+            q_curr = strang_step_wlc(q_curr, w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half,sht)
         q_full[i] = q_curr
     return np.real(q_full)
 
-def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_backward, dt, q_prev, mode):
+def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_backward, dt, q_prev, mode, sht):
     Nx, Ny, Nz = q0_spatial.shape[:3]
     N_ang = U_vectors.shape[0]
     ds = length / n_substeps
@@ -134,14 +119,16 @@ def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta,
     w_arr = w if w.ndim==3 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
     for i in range(n_substeps):
         if mode == 'thermal':
-            q_curr = strang_step_wlc_backward(q_curr - dt*(q_curr - q_prev[i]) + np.sqrt(dt)*mu_backward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half)
+            q_curr = strang_step_wlc_backward(q_curr - dt*(q_curr - q_prev[i]) + np.sqrt(dt)*mu_backward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht)
         else:
-            q_curr = strang_step_wlc_backward(q_curr, w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half)
+            q_curr = strang_step_wlc_backward(q_curr, w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht)
         q_full[i] = q_curr
     return np.real(q_full)
 
 
 def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_class, w_sc, w_rs_sc, ang_weights, spat_weights, u_grid, gridshape, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, dt, qf_previous, qb_previous, qf_prev_sc, qb_prev_sc, qf_prev_rs_sc, qb_prev_rs_sc, geom_kernel, antiparallel_kernel, mode):
+    sht = LebedevSHT(u_grid, ang_weights, 11)
+
     seq = list(backbone_seq)
     Nx, Ny, Nz, Nang = gridshape
     N = len(seq)
@@ -165,7 +152,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
         eta_2 = eta_sc2_full[idx]
         mu_forward = (eta_1 + 1j*eta_2)/np.sqrt(2)
         mu_forward = np.broadcast_to(mu_forward[:, :, :, None, :], (Nx, Ny, Nz, Nang, n_quad_per_rod))
-        q_sc_forward[idx] = propagate_forward_wlc(np.ones(gridshape[:3]), w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_sc[idx], mode)
+        q_sc_forward[idx] = propagate_forward_wlc(np.ones(gridshape[:3]), w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_sc[idx], mode, sht)
 
     #Propagate residue-specific sidechains:
     q_sc_rs_forward = {key: np.zeros((LateralChains.SideChain(key).length, n_quad_per_rod, *gridshape), dtype=np.complex64) for key in sc_keys}
@@ -178,14 +165,14 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
                 mu_forward = np.broadcast_to(mu_forward[:, :, :, None, :], (Nx, Ny, Nz,  Nang, n_quad_per_rod))
 
                 if LateralChains.SideChain(key).terminal == 'donor':
-                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.sum(q_sc_forward['Nsc'][-1]*ang_weights, axis = -1), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.sum(q_sc_forward['Nsc'][-1]*ang_weights, axis = -1), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode, sht)
                 elif LateralChains.SideChain(key).terminal == 'acceptor':
-                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.sum(q_sc_forward['Csc'][-1]*ang_weights, axis = -1), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.sum(q_sc_forward['Csc'][-1]*ang_weights, axis = -1), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode, sht)
                 elif LateralChains.SideChain(key).terminal == 'both':
                     ID = np.tensordot(q_sc_forward['Nsc'][-1] * ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))*np.tensordot(q_sc_forward['Csc'][-1] * ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
-                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(ID, w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(ID, w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode, sht)
                 elif LateralChains.SideChain(key).terminal == 'none':
-                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.ones(gridshape[:3]), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_forward[key][rod_element] = propagate_forward_wlc(np.ones(gridshape[:3]), w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_prev_rs_sc[key][rod_element], mode, sht)
             
 
     #Propagate main backbone forward
@@ -203,7 +190,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
             q_init_spatial *= np.tensordot(q_sc_rs_forward[seq[idx]][-1, -1]* ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
         elif idx % 3 == 2: 
             q_init_spatial *= np.tensordot(q_sc_forward['Csc'][-1] * ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
-        qf_list[idx] = propagate_forward_wlc(q_init_spatial, w_per_class[res], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_previous[idx], mode)
+        qf_list[idx] = propagate_forward_wlc(q_init_spatial, w_per_class[res], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, mu_forward, dt, qf_previous[idx], mode, sht)
         q_init_spatial = np.tensordot(qf_list[idx][-1] * ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
 
     #Backward propagation backbone, residual specific accumulation, partial bare sidechains accumulation
@@ -234,7 +221,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
         elif idx %3 == 1 and seq[idx] != 'G':
             q_prev_spatial *= np.tensordot(q_sc_rs_forward[seq[idx]][-1, -1]* ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
 
-        qb_list[idx] = propagate_backward_wlc(q_prev_spatial, w_per_class[res], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_previous[idx], mode)
+        qb_list[idx] = propagate_backward_wlc(q_prev_spatial, w_per_class[res], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_previous[idx], mode, sht)
         q_prev_spatial = np.tensordot(qb_list[idx][-1] * ang_weights[None,None,None,:], geom_kernel, axes=([3],[0]))
         #breakpoint()
         if idx == 0:
@@ -259,9 +246,9 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
                 mu_backward = (eta_2 + 1j*eta_1)/np.sqrt(2)
                 mu_backward = np.broadcast_to(mu_backward[:, :, :, None, :], (Nx, Ny, Nz,Nang, n_quad_per_rod))
                 if rod_element == LateralChains.SideChain(key).length-1:
-                    q_sc_rs_backward[key][rod_element, :, :, :] = propagate_backward_wlc(q_sc_rs_backward[key][rod_element, -1], w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_backward[key][rod_element, :, :, :] = propagate_backward_wlc(q_sc_rs_backward[key][rod_element, -1], w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_rs_sc[key][rod_element], mode, sht)
                 elif rod_element < LateralChains.SideChain(key).length-1:
-                    q_sc_rs_backward[key][rod_element, :, :, :] = propagate_backward_wlc(q_sc_rs_backward[key][rod_element+1, 0], w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_rs_sc[key][rod_element], mode)
+                    q_sc_rs_backward[key][rod_element, :, :, :] = propagate_backward_wlc(q_sc_rs_backward[key][rod_element+1, 0], w_rs_sc[key], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_rs_sc[key][rod_element], mode, sht)
             if LateralChains.SideChain(key).terminal == 'acceptor':
                 q_sc_bb['Csc'] += np.sum(ang_weights*q_sc_rs_backward[key][0, 0], axis = -1)[..., None]
             elif LateralChains.SideChain(key).terminal == 'donor':
@@ -277,7 +264,7 @@ def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_clas
         eta_2 = eta_sc2_full[idx][:, : , :, ::-1]
         mu_backward = (eta_2 + 1j*eta_1)/np.sqrt(2)
         mu_backward = np.broadcast_to(mu_backward[:, :,:, None, :], (Nx, Ny, Nz, Nang, n_quad_per_rod))
-        q_sc_bb_full[idx] = propagate_backward_wlc(q_sc_bb[idx], w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_sc[idx], mode)
+        q_sc_bb_full[idx] = propagate_backward_wlc(q_sc_bb[idx], w_sc[idx], u_grid, length_rod, n_quad_per_rod, D_theta, Lx, Ly,  Lz, mu_backward, dt, qb_prev_sc[idx], mode, sht)
     
     temp_f = np.sum(qf_list[-1][-1] * ang_weights[None,None,None,:], axis=-1)
     
