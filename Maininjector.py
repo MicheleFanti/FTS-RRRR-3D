@@ -9,8 +9,8 @@ import time
 
 def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerrum_length, decay_es, rhop0, max_iter, gamma, salt_fraction, gridshape, eq_iters, prod_iters, outdir):
     b_length = 0.38/3
-    n_quad_per_rod = 3
-    dx = 0.38/(2*n_quad_per_rod)
+    n_quad_per_rod = 6
+    dx = 0.38/(3*n_quad_per_rod)
     
     l_hb = 0.18
     sigma_hb = 0.02 
@@ -51,8 +51,8 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
     V_ev, _ = make_3D_kernel_fft(gaussian_realspace,  grid, spat_weights, 0, sigma_ev)
     
     A_hb = build_angular_kernel(Nang, u_vectors, np.pi, ang_weights)
-    geom_kernel = build_identity_angular_kernel(Nang, u_vectors, (2/3)*np.pi, ang_weights)
-    antiparall_kernel = build_identity_angular_kernel(Nang, u_vectors, np.pi, ang_weights)
+    geom_kernel = build_angular_kernel(Nang, u_vectors, (2/3)*np.pi, ang_weights)
+    antiparall_kernel = build_angular_kernel(Nang, u_vectors, np.pi, ang_weights)
     
     DeltaRhoHystory = []
     PartialsHystory = {k: [0] * (max_iter+1) for k in rho0_all}
@@ -156,9 +156,9 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
 
         w_chains, w_sidechains, w_solvent, w_sidechains_rs, xi, deviations = mixer.linear_descent(xi, w_chains, w_solvent, w_sidechains, w_sidechains_rs, rhobb_class, rhoS, rhosc_class,rho_sc_rs_class, c_gamma,ang_weights,spat_weights, V_hydro, V_hb, A_hb, V_es, h_as, c_field, box_lengths, gridshape)
         if it == 1:
-            rhobb_class, rhosc_class, rho_sc_rs_class, Q, q_prev_fw_list, q_prev_bw_list,q_prev_fwsc_list, q_prev_bwsc_list, q_prev_fw_rs_sc_list, q_prev_bw_rs_sc_list = propagate_closed(sequence, residue_class_per_segment, l_chain, rho0_all, w_chains, w_sidechains, w_sidechains_rs, ang_weights, spat_weights, u_vectors, gridshape, b_length, n_quad_per_rod, D_theta = 0.48**(-1), Lx=dx*Nx, Ly = dx*Ny, Lz = dx*Nz, dt=0.01, qf_previous= q_prev_fw_list, qb_previous= q_prev_bw_list, qf_prev_sc=q_prev_fwsc_list, qb_prev_sc=q_prev_bwsc_list,qf_prev_rs_sc=q_prev_fw_rs_sc_list, qb_prev_rs_sc=q_prev_bw_rs_sc_list, geom_kernel = geom_kernel, antiparallel_kernel=  antiparall_kernel, mode = 'deterministic')
+            rhobb_class, rhosc_class, rho_sc_rs_class, Q, q_prev_fw_list, q_prev_bw_list,q_prev_fwsc_list, q_prev_bwsc_list, q_prev_fw_rs_sc_list, q_prev_bw_rs_sc_list = propagate_closed(sequence, residue_class_per_segment, l_chain, rho0_all, w_chains, w_sidechains, w_sidechains_rs, ang_weights, spat_weights, u_vectors, gridshape, b_length, n_quad_per_rod, D_theta = 0.01**(-1), Lx=dx*Nx, Ly = dx*Ny, Lz = dx*Nz, dt=0.01, qf_previous= q_prev_fw_list, qb_previous= q_prev_bw_list, qf_prev_sc=q_prev_fwsc_list, qb_prev_sc=q_prev_bwsc_list,qf_prev_rs_sc=q_prev_fw_rs_sc_list, qb_prev_rs_sc=q_prev_bw_rs_sc_list, geom_kernel = geom_kernel, antiparallel_kernel=  antiparall_kernel, mode = 'deterministic')
         else:
-            rhobb_class, rhosc_class, rho_sc_rs_class, Q, q_prev_fw_list, q_prev_bw_list,q_prev_fwsc_list, q_prev_bwsc_list, q_prev_fw_rs_sc_list, q_prev_bw_rs_sc_list = propagate_closed(sequence, residue_class_per_segment, l_chain, rho0_all, w_chains, w_sidechains, w_sidechains_rs, ang_weights, spat_weights, u_vectors, gridshape, b_length, n_quad_per_rod, D_theta = 0.48**(-1), Lx=dx*Nx, Ly = dx*Ny, Lz = dx*Nz, dt=0.01, qf_previous = q_prev_fw_list, qb_previous = q_prev_bw_list, qf_prev_sc=q_prev_fwsc_list, qb_prev_sc=q_prev_bwsc_list,qf_prev_rs_sc=q_prev_fw_rs_sc_list, qb_prev_rs_sc=q_prev_bw_rs_sc_list, geom_kernel = geom_kernel, antiparallel_kernel=  antiparall_kernel, mode = 'thermal')
+            rhobb_class, rhosc_class, rho_sc_rs_class, Q, q_prev_fw_list, q_prev_bw_list,q_prev_fwsc_list, q_prev_bwsc_list, q_prev_fw_rs_sc_list, q_prev_bw_rs_sc_list = propagate_closed(sequence, residue_class_per_segment, l_chain, rho0_all, w_chains, w_sidechains, w_sidechains_rs, ang_weights, spat_weights, u_vectors, gridshape, b_length, n_quad_per_rod, D_theta = 0.01**(-1), Lx=dx*Nx, Ly = dx*Ny, Lz = dx*Nz, dt=0.01, qf_previous = q_prev_fw_list, qb_previous = q_prev_bw_list, qf_prev_sc=q_prev_fwsc_list, qb_prev_sc=q_prev_bwsc_list,qf_prev_rs_sc=q_prev_fw_rs_sc_list, qb_prev_rs_sc=q_prev_bw_rs_sc_list, geom_kernel = geom_kernel, antiparallel_kernel=  antiparall_kernel, mode = 'thermal')
         for solvents in ['plus', 'minus', 'neutral']:
             rhoS[solvents] =  rho0_sv[solvents]*np.exp(-w_solvent[solvents])/(np.sum(spat_weights*np.exp(-w_solvent[solvents])))
 
@@ -167,7 +167,7 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
         total_diff, partial_diffs = compute_constraint_violations(rho0_all, {**rho_all_residue, **rhosc_class}, spat_weights, ang_weights, V)
         DeltaRhoHystory.append(total_diff)
         
-        local_density_violation_no_rhoSneutral = np.zeros(gridshape[:2], dtype = np.float64)
+        local_density_violation_no_rhoSneutral = np.zeros(gridshape[:3], dtype = np.float64)
         for key in {**rhobb_class, **rhosc_class}:
             local_density_violation_no_rhoSneutral += np.sum({**rho_all_residue, **rhosc_class}[key] * ang_weights, axis=-1)
         LDVC_mean = np.mean(local_density_violation_no_rhoSneutral)

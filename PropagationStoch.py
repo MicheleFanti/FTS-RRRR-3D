@@ -32,9 +32,11 @@ class LebedevSHT:
     def inverse(self, coeffs):
         coeffs = np.moveaxis(coeffs, -1, 0)
         f = np.tensordot(coeffs, self.Y, axes=(0,0))
-        return f
+        return f*4*np.pi
+
 def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
     N_ang = len(UX)
+    #print(f'wshape, qshape: {w.shape}, {q.shape}')
     if q.ndim == 3: 
         q = np.repeat(q[..., None], N_ang, axis=-1)
     ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
@@ -48,6 +50,7 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
     flm = sht.forward(q* np.exp(-w*ds/2))
     flm = flm * ang_mul_half_full[None, None, None, :]
     q = sht.inverse(flm)
+    #print(f'np.mean: {np.mean(q)}')
     q = q* np.exp(-w*ds/2)
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     return q
@@ -55,6 +58,9 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
 
 def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
     N_ang = len(UX)
+    #print(f'wshape, qshape: {w.shape}, {q.shape}')
+    if q.ndim == 3: 
+        q = np.repeat(q[..., None], N_ang, axis=-1)
     ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
 
     phase_half = np.exp(1j * (
@@ -69,6 +75,7 @@ def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht
     q = sht.inverse(flm)
     q = q* np.exp(-w*ds/2)
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
+    #print(f'done, np.mean; {np.mean(q)}')
     return q
 
 def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, Lx, Ly, Lz, mu_forward, dt, q_prev, mode, sht):
@@ -85,12 +92,15 @@ def propagate_forward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta, 
     L = int(np.sqrt(N_ang) - 1)
     ell = np.arange(L+1)
     ang_mul_half = np.exp(-Dtheta*ell*(ell+1)*ds)
-    if q0_spatial.ndim == 3 and q0_spatial.shape[-1] == 1:
+    if q0_spatial.ndim == 3:
+        q_curr = np.repeat(q0_spatial[..., None], N_ang, axis=-1)
+    elif q0_spatial.ndim == 4 and q0_spatial.shape[-1] == 1:
         q_curr = np.repeat(q0_spatial, N_ang, axis=-1).astype(np.complex64)
     else:
         q_curr = np.asarray(q0_spatial, dtype=np.complex64)
+
     q_full = np.zeros((n_substeps, Nx, Ny, Nz, N_ang), dtype=np.complex64)
-    w_arr = w if w.ndim==3 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
+    w_arr = w if w.ndim==4 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
     for i in range(n_substeps):
         if mode == 'thermal':
             q_curr = strang_step_wlc(q_curr - dt*(q_curr - q_prev[i]) + dt*mu_forward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht)
@@ -118,7 +128,7 @@ def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta,
     else:
         q_curr = np.asarray(q0_spatial, dtype=np.complex64)
     q_full = np.zeros((n_substeps, Nx, Ny, Nz, N_ang), dtype=np.complex64)
-    w_arr = w if w.ndim==3 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
+    w_arr = w if w.ndim==4 else np.repeat(w[:,:,:,None], N_ang, axis=-1)
     for i in range(n_substeps):
         if mode == 'thermal':
             q_curr = strang_step_wlc_backward(q_curr - dt*(q_curr - q_prev[i]) + np.sqrt(dt)*mu_backward[...,i], w_arr, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht)
@@ -129,7 +139,7 @@ def propagate_backward_wlc(q0_spatial, w, U_vectors, length, n_substeps, Dtheta,
 
 
 def propagate_closed(sequence, backbone_seq, l_chain, rho0_per_class, w_per_class, w_sc, w_rs_sc, ang_weights, spat_weights, u_grid, gridshape, length_rod, n_quad_per_rod, D_theta, Lx, Ly, Lz, dt, qf_previous, qb_previous, qf_prev_sc, qb_prev_sc, qf_prev_rs_sc, qb_prev_rs_sc, geom_kernel, antiparallel_kernel, mode):
-    sht = LebedevSHT(u_grid, ang_weights, 11)
+    sht = LebedevSHT(u_grid, ang_weights, 6)
 
     seq = list(backbone_seq)
     Nx, Ny, Nz, Nang = gridshape
