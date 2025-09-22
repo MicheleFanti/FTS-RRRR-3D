@@ -18,10 +18,10 @@ if __name__ == "__main__":
     prod_iters        = int(sys.argv[6]) if len(sys.argv) > 6 else 1000
 
     # parametri fissi
-    gridshape = (30, 30, 30, 50)
+    gridshape = (75, 75, 110, 50)
     max_iter = eq_iters+prod_iters
     rhop0_values = [0.16]
-    vchi_ps_values = [1.0]
+    vchi_ps_values = [0.8]
     vchi_pp_values = [0.0]
     bjerrum_values = [0.0]
     salt_fractions = [0.005]
