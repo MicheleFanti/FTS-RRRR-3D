@@ -34,7 +34,9 @@ class LebedevSHT:
         f = np.tensordot(coeffs, self.Y, axes=(0,0))
         return f
 def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
-    N_ang = q.shape[-1]
+    N_ang = len(UX)
+    if q.ndim == 3: 
+        q = np.repeat(q[..., None], N_ang, axis=-1)
     ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
 
     phase_half = np.exp(-1j * (
@@ -44,7 +46,7 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
     ) * (ds/2))
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
     flm = sht.forward(q* np.exp(-w*ds/2))
-    flm = flm * ang_mul_half_full[None, :]
+    flm = flm * ang_mul_half_full[None, None, None, :]
     q = sht.inverse(flm)
     q = q* np.exp(-w*ds/2)
     q = ifftn(fftn(q, axes=(0,1,2)) * phase_half, axes=(0,1,2))
@@ -52,7 +54,7 @@ def strang_step_wlc(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
 
 
 def strang_step_wlc_backward(q, w, ds, KX, KY, KZ, UX, UY, UZ, ang_mul_half, sht):
-    N_ang = q.shape[-1]
+    N_ang = len(UX)
     ang_mul_half_full = np.concatenate([np.repeat(ang_mul_half[l], 2*l+1) for l in range(len(ang_mul_half))])
 
     phase_half = np.exp(1j * (
