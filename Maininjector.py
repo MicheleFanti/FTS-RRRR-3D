@@ -63,7 +63,7 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
     rhoS = {}
     rho0_sv = {}
     total_charge = sum(es_charges.get(res, 0.0) for res in sequence)
-    save_interval = 5
+    save_interval = 10
     max_iter = eq_iters + prod_iters
 
 
@@ -191,7 +191,7 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
         if it % 30 == 0:
             os.system('clear')   
             plot_densities(sequence, {**rho_all_residue, **rhosc_class}, rhoS, gridshape, it, vchi_pp, vchi_ps, gamma, 0.0, rhop0, eps_yukawa, bjerrum_length, ang_weights, plots_folder)
-        if it > eq_iters and ((it - eq_iters) % save_interval == 0):
+        if it > 1600 and it < 1700 and it %save_interval == 0:
             save_idx = it
             save_fname = os.path.join(npz_folder, f"densities_iter_{save_idx:04d}.npz")
             
@@ -199,13 +199,83 @@ def main(sequence, epsilon_hb, vchi_pp, vchi_ps, eps_yukawa, decay_yukawa, bjerr
                 save_dict = {}
 
                 # --- Save densities from rhoS, excluding solvent ---
-                for s_key, s_arr in rhoS.items():
-                    if s_key.lower() != "solvent":
+                '''for s_key, s_arr in rhoS.items():
+                    if s_key.lower() != "neutral":
                         save_dict[f"rhoS_{s_key}"] = (
                             s_arr.get().astype(np.float32) 
                             if np.isrealobj(s_arr) else s_arr.get()
+                        )'''
+                for a_key, a_arr in rhobb_class.items():  
+                    if a_key != 'pb':
+                        save_dict[f"{a_key}"] = (
+                            a_arr.get().astype(np.float32) 
+                            if np.isrealobj(a_arr) else a_arr.get()
                         )
-                for a_key, a_arr in rho_all_residue.items():  
+                for a_key, a_arr in rhosc_class.items():  
+                    save_dict[f"{a_key}"] = (
+                        a_arr.get().astype(np.float32) 
+                        if np.isrealobj(a_arr) else a_arr.get()
+                    )
+                for a_key, a_arr in rho_sc_rs_class.items():  
+                    save_dict[f"{a_key}rs_sc"] = (
+                        a_arr.get().astype(np.float32) 
+                        if np.isrealobj(a_arr) else a_arr.get()
+                    )
+                np.savez_compressed(save_fname, **save_dict)
+                print(f"Saved densities (excluding solvent) and l_p at iter {it} -> {save_fname}")
+
+            except Exception as e:
+                print(f"Warning: failed to save densities at iter {it}: {e}")
+        elif it > 1800 and it < 1900 and it %save_interval == 0:
+            save_idx = it
+            save_fname = os.path.join(npz_folder, f"densities_iter_{save_idx:04d}.npz")
+            
+            try:
+                save_dict = {}
+
+                # --- Save densities from rhoS, excluding solvent ---
+                '''for s_key, s_arr in rhoS.items():
+                    if s_key.lower() != "neutral":
+                        save_dict[f"rhoS_{s_key}"] = (
+                            s_arr.get().astype(np.float32) 
+                            if np.isrealobj(s_arr) else s_arr.get()
+                        )'''
+                for a_key, a_arr in rhobb_class.items():  
+                    if a_key != 'pb':
+                        save_dict[f"{a_key}"] = (
+                            a_arr.get().astype(np.float32) 
+                            if np.isrealobj(a_arr) else a_arr.get()
+                        )
+                for a_key, a_arr in rhosc_class.items():  
+                    save_dict[f"{a_key}"] = (
+                        a_arr.get().astype(np.float32) 
+                        if np.isrealobj(a_arr) else a_arr.get()
+                    )
+                for a_key, a_arr in rho_sc_rs_class.items():  
+                    save_dict[f"{a_key}rs_sc"] = (
+                        a_arr.get().astype(np.float32) 
+                        if np.isrealobj(a_arr) else a_arr.get()
+                    )
+                np.savez_compressed(save_fname, **save_dict)
+                print(f"Saved densities (excluding solvent) and l_p at iter {it} -> {save_fname}")
+
+            except Exception as e:
+                print(f"Warning: failed to save densities at iter {it}: {e}")
+        elif it > 2100 and it %15 == 0: 
+            save_idx = it
+            save_fname = os.path.join(npz_folder, f"densities_iter_{save_idx:04d}.npz")
+            
+            try:
+                save_dict = {}
+
+                # --- Save densities from rhoS, excluding solvent ---
+                '''for s_key, s_arr in rhoS.items():
+                    if s_key.lower() != "neutral":
+                        save_dict[f"rhoS_{s_key}"] = (
+                            s_arr.get().astype(np.float32) 
+                            if np.isrealobj(s_arr) else s_arr.get()
+                        )'''
+                for a_key, a_arr in rhobb_class.items():  
                     if a_key != 'pb':
                         save_dict[f"{a_key}"] = (
                             a_arr.get().astype(np.float32) 
